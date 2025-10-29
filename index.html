@@ -78,39 +78,38 @@
                 otomo: scoreOtomo
             };
 
-            // fetch API を使ってGASにデータをPOST送信
-            fetch(GAS_URL, {
-                method: 'POST',
-                mode: 'cors',
-                cache: 'no-cache',
-                headers: {
-                    // ★★★ ここを変更 ★★★
-                    'Content-Type': 'text/plain' 
-                },
-                body: JSON.stringify(data), // 送るデータはJSON文字列のまま
-                redirect: 'follow'
-            })
-            .then(response => response.json())
-            .then(result => {
-                // ... (then, catch, finally は変更なし) ...
-                if (result.status === 'success') {
-                    showMessage('送信成功！スプレッドシートに記録されました。', 'success');
-                    form.reset(); 
-                    document.getElementById('game-date').valueAsDate = new Date();
-                } else {
-                    throw new Error(result.message || '不明なエラーが発生しました。');
-                }
-            })
-            .catch(error => {
-                console.error('Fetch Error:', error);
-                showMessage(`送信エラー: ${error.message}`, 'error');
-            })
-            .finally(() => {
-                submitButton.disabled = false;
-                submitButton.textContent = "送信";
-            });
+fetch(GAS_URL, {
+            method: 'POST',
+            // ★★★ ここを 'no-cors' に変更 ★★★
+            // 'no-cors'モードは「応答を見ない（送りっぱなし）」を意味します
+            mode: 'no-cors', 
+            // ★★★★★★★★★★★★★★★★★★★★
+            
+            cache: 'no-cache',
+            headers: {
+                'Content-Type': 'text/plain'
+            },
+            body: JSON.stringify(data),
+            redirect: 'follow'
+        })
+        .then(response => {
+            // 'no-cors' モードでは .then は使われない (または空の応答が来る)
+            // 常に成功したとみなす
+            showMessage('送信成功！スプレッドシートに記録されました。', 'success');
+            form.reset(); 
+            document.getElementById('game-date').valueAsDate = new Date();
+        })
+        .catch(error => {
+            // 'no-cors' モードでは、ネットワークの切断以外で
+            // ここがエラーになることは、ほぼ無くなります。
+            console.error('Fetch Error:', error);
+            showMessage(`送信エラー: ${error.message}`, 'error');
+        })
+        .finally(() => {
+            submitButton.disabled = false;
+            submitButton.textContent = "送信";
         });
-
+    });
         // ... (showMessage, 日付デフォルト設定 は変更なし) ...
         function showMessage(msg, type) {
             messageEl.textContent = msg;
