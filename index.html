@@ -5,13 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>麻雀 戦歴入力 (粗点対応版)</title>
 
-    <style>
+<style>
         body { font-family: sans-serif; max-width: 500px; margin: 2em auto; padding: 1em; background: #f9f9f9; }
         form { background: #fff; padding: 2em; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
         div { margin-bottom: 1em; }
         label { display: block; margin-bottom: 0.5em; font-weight: bold; }
         
-        /* --- 変更点 (入力欄とチェックボックスの調整) --- */
+        /* --- 変更点 (チェックボックス2つに対応) --- */
         input[type="date"] {
             width: calc(100% - 10px); padding: 8px; border: 1px solid #ccc; border-radius: 4px;
         }
@@ -24,13 +24,13 @@
             border: 1px solid #ccc; 
             border-radius: 4px; 
             flex-grow: 1; /* 入力欄を伸ばす */
-            width: 70%; /* 幅の目安 */
+            width: 50%; /* 幅の目安 (入力欄) */
         }
-        .tie-label {
+        .checkbox-label {
             display: block;
             margin-left: 10px;
             font-weight: normal;
-            font-size: 0.9em;
+            font-size: 0.85em; /* 少し小さく */
             color: #555;
             white-space: nowrap; /* 折り返し防止 */
         }
@@ -48,7 +48,7 @@
 
     <h2>3人麻雀 戦歴入力フォーム</h2>
 
-    <form id="score-form">
+<form id="score-form">
         <div>
             <label for="game-date">日付:</label>
             <input type="date" id="game-date" required>
@@ -57,8 +57,11 @@
             <label for="matsui-score">松井 粗点:</label>
             <div class="input-group">
                 <input type="number" id="matsui-score" placeholder="例: 55000" step="100" required>
-                <label class="tie-label">
+                <label class="checkbox-label">
                     <input type="checkbox" id="matsui-tie-priority"> 同着上位
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="matsui-tobi"> 飛ばし
                 </label>
             </div>
         </div>
@@ -66,8 +69,11 @@
             <label for="komaki-score">小牧 粗点:</label>
             <div class="input-group">
                 <input type="number" id="komaki-score" placeholder="例: 30000" step="100" required>
-                <label class="tie-label">
+                <label class="checkbox-label">
                     <input type="checkbox" id="komaki-tie-priority"> 同着上位
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="komaki-tobi"> 飛ばし
                 </label>
             </div>
         </div>
@@ -75,8 +81,11 @@
             <label for="otomo-score">大友 粗点:</label>
             <div class="input-group">
                 <input type="number" id="otomo-score" placeholder="例: 20000" step="100" required>
-                <label class="tie-label">
+                <label class="checkbox-label">
                     <input type="checkbox" id="otomo-tie-priority"> 同着上位
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="otomo-tobi"> 飛ばし
                 </label>
             </div>
         </div>
@@ -84,7 +93,7 @@
     </form>
 
     <div id="message"></div>
-<script>
+    <script>
         // ---------------------------------
         // 設定項目
         // ---------------------------------
@@ -124,82 +133,112 @@
                 return;
             }
 
-            // ★★★ 新規追加: 同点チェック ★★★
-            const matsuiCheck = document.getElementById('matsui-tie-priority').checked;
-            const komakiCheck = document.getElementById('komaki-tie-priority').checked;
-            const otomoCheck = document.getElementById('otomo-tie-priority').checked;
+            // 「同着上位」チェックを取得
+            const matsuiTieCheck = document.getElementById('matsui-tie-priority').checked;
+            const komakiTieCheck = document.getElementById('komaki-tie-priority').checked;
+            const otomoTieCheck = document.getElementById('otomo-tie-priority').checked;
 
+            // ★★★ 新規追加: 「飛ばし」チェックを取得 ★★★
+            const matsuiTobiCheck = document.getElementById('matsui-tobi').checked;
+            const komakiTobiCheck = document.getElementById('komaki-tobi').checked;
+            const otomoTobiCheck = document.getElementById('otomo-tobi').checked;
+            
+            // プレイヤーオブジェクト作成 (tobiCheck を追加)
+            let players = [
+                { name: 'matsui', raw: rawMatsui, tiePriority: matsuiTieCheck, tobiCheck: matsuiTobiCheck, score: 0 },
+                { name: 'komaki', raw: rawKomaki, tiePriority: komakiTieCheck, tobiCheck: komakiTobiCheck, score: 0 },
+                { name: 'otomo', raw: rawOtomo, tiePriority: otomoTieCheck, tobiCheck: otomoTobiCheck, score: 0 }
+            ];
+
+            // ★★★ 新規追加: トビ(飛ばし)の事前エラーチェック ★★★
+            const tobiCheckCount = (matsuiTobiCheck ? 1 : 0) + (komakiTobiCheck ? 1 : 0) + (otomoTobiCheck ? 1 : 0);
+            const negativeRawPlayers = players.filter(p => p.raw < 0);
+
+            if (tobiCheckCount >= 2) {
+                showMessage('エラー: 「飛ばし」チェックボックスが2つ以上ONになっています。', 'error');
+                return;
+            }
+            if (tobiCheckCount === 1 && negativeRawPlayers.length === 0) {
+                showMessage('エラー: 「飛ばし」がONですが、粗点マイナスのプレイヤーがいません。', 'error');
+                return;
+            }
+            // ★★★ トビ(飛ばし)チェックここまで ★★★
+
+            // (既存) 同点チェック
             let tieError = false;
             let errorMessage = 'エラー: 同点のプレイヤーがいます。「同着上位」チェックボックスで順位を明確に指定してください。(両方ON、または両方OFFは不可)';
 
-            // 3人同点チェック
             if (rawMatsui === rawKomaki && rawKomaki === rawOtomo) {
-                const checkCount = (matsuiCheck ? 1 : 0) + (komakiCheck ? 1 : 0) + (otomoCheck ? 1 : 0);
-                if (checkCount === 0 || checkCount === 3) { // 0個または3個ONはNG
+                const checkCount = (matsuiTieCheck ? 1 : 0) + (komakiTieCheck ? 1 : 0) + (otomoTieCheck ? 1 : 0);
+                if (checkCount === 0 || checkCount === 3) { 
                     tieError = true;
                     errorMessage = 'エラー: 3人同点です。チェックボックスが0個または3個ONになっています。順位を明確に指定してください。';
                 }
             } else {
-                // 2人同点チェック
-                if (rawMatsui === rawKomaki && matsuiCheck === komakiCheck) { // 両方ONまたは両方OFFはNG
+                if (rawMatsui === rawKomaki && matsuiTieCheck === komakiTieCheck) {
                     tieError = true;
                 }
-                if (rawKomaki === rawOtomo && komakiCheck === otomoCheck) {
+                if (rawKomaki === rawOtomo && komakiTieCheck === otomoTieCheck) {
                     tieError = true;
                 }
-                if (rawMatsui === rawOtomo && matsuiCheck === otomoCheck) {
+                if (rawMatsui === rawOtomo && matsuiTieCheck === otomoTieCheck) {
                     tieError = true;
                 }
             }
-
             if (tieError) {
                 showMessage(errorMessage, 'error');
-                return; // 送信を中断
+                return;
             }
-            // ★★★ 同点チェックここまで ★★★
 
-
-            // ★★★ 変更点: プレイヤー配列にチェック状態(tiePriority)を追加 ★★★
-            let players = [
-                { name: 'matsui', raw: rawMatsui, tiePriority: matsuiCheck, score: 0 },
-                { name: 'komaki', raw: rawKomaki, tiePriority: komakiCheck, score: 0 },
-                { name: 'otomo', raw: rawOtomo, tiePriority: otomoCheck, score: 0 }
-            ];
-
-            // ★★★ 変更点: ソートロジックに同点時の処理を追加 ★★★
+            // (既存) ソートロジック
             players.sort((a, b) => {
                 if (a.raw !== b.raw) {
-                    return b.raw - a.raw; // 粗点が高い順
+                    return b.raw - a.raw; 
                 }
-                // 同点の場合、tiePriorityがtrue (チェックあり) の方が上位 (インデックスが若くなる)
                 if (a.tiePriority && !b.tiePriority) {
-                    return -1; // aをbより前に
+                    return -1; 
                 }
                 if (!a.tiePriority && b.tiePriority) {
-                    return 1; // bをaより前に
+                    return 1; 
                 }
-                return 0; // (両方ON/OFFはエラーで弾かれているはず)
+                return 0;
             });
             
-            // 3. 2位と3位のスコアを計算 (変更なし)
+            // (既存) 2位と3位のスコアを計算
             const score2nd = customRound((players[1].raw - 40000) / 1000);
             const score3rd = customRound((players[2].raw - 40000) / 1000) - 20;
 
-            // 4. 1位のスコアを算出 (変更なし)
+            // (既存) 1位のスコアを算出
             const score1st = -(score2nd + score3rd);
 
-            // 5. 元のプレイヤー名に戻す (変更なし)
-            players[0].score = score1st; // 1位の人
-            players[1].score = score2nd; // 2位の人
-            players[2].score = score3rd; // 3位の人
+            // (既存) プレイヤーにスコア割り当て
+            players[0].score = score1st;
+            players[1].score = score2nd;
+            players[2].score = score3rd;
 
-            // 6. 送信データ（スコア）を作成 (変更なし)
+            // (既存) finalScores マップ作成
             const finalScores = {};
             players.forEach(p => {
                 finalScores[p.name] = p.score;
             });
             
-            // --- ここから下は、変更なし ---
+            // ★★★ 新規追加: トビ(飛ばし)のスコア移動 ★★★
+            // この処理は、順位計算(清算点計算)が終わった *後* に行う
+            if (tobiCheckCount === 1 && negativeRawPlayers.length > 0) {
+                
+                // .find() はソート前の players 配列でも使えますが、
+                // players 配列には tobiCheck の状態がすでに入っているので、これを使います
+                const tobiWinnerName = players.find(p => p.tobiCheck).name;
+                const tobiLoserName = negativeRawPlayers[0].name; // 粗点マイナスの人
+
+                console.log(`トビ処理: ${tobiWinnerName} が +10, ${tobiLoserName} が -10`);
+                
+                finalScores[tobiWinnerName] += 10;
+                finalScores[tobiLoserName] -= 10;
+            }
+            // ★★★ トビ(飛ばし)処理ここまで ★★★
+            
+            // (既存) 送信処理
             submitButton.disabled = true;
             submitButton.textContent = "送信中...";
             showMessage('', ''); 
@@ -238,13 +277,13 @@
             });
         });
 
-        // (変更なし) メッセージ表示用のヘルパー関数
+        // (既存) メッセージ表示用のヘルパー関数
         function showMessage(msg, type) {
             messageEl.textContent = msg;
             messageEl.className = type;
         }
 
-        // (変更なし) 日付のデフォルト値を今日に設定
+        // (既存) 日付のデフォルト値を今日に設定
         document.getElementById('game-date').valueAsDate = new Date();
     </script>
 </body>
