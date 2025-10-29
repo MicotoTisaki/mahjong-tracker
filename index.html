@@ -48,7 +48,6 @@
         // ---------------------------------
         // ユーザー設定項目
         // ---------------------------------
-        // GASの「ウェブアプリのURL」を貼り付け
         const GAS_URL = "https://script.google.com/macros/s/AKfycbxk6bgUggm-k1fiepdm_xQO4U43da_zpbQyW7ba84PMaracGbv8V94G5nWkST6t5tpnsw/exec";
         // ---------------------------------
 
@@ -57,25 +56,21 @@
         const submitButton = document.getElementById('submit-button');
 
         form.addEventListener('submit', function(e) {
-            e.preventDefault(); // デフォルトの送信をキャンセル
+            e.preventDefault(); 
             
-            // 各スコアのIDを取得
             const scoreMatsui = parseInt(document.getElementById('matsui-score').value) || 0;
             const scoreKomaki = parseInt(document.getElementById('komaki-score').value) || 0;
             const scoreOtomo = parseInt(document.getElementById('otomo-score').value) || 0;
 
-            // 合計が0チェック
             if (scoreMatsui + scoreKomaki + scoreOtomo !== 0) {
                 showMessage('エラー: 3人のスコア合計が 0 になりません。', 'error');
-                return; // 送信を中断
+                return;
             }
 
-            // 送信ボタンを無効化
             submitButton.disabled = true;
             submitButton.textContent = "送信中...";
-            showMessage('', ''); // メッセージをクリア
+            showMessage('', ''); 
 
-            // GASに送信するデータを作成
             const data = {
                 date: document.getElementById('game-date').value,
                 matsui: scoreMatsui,
@@ -89,17 +84,19 @@
                 mode: 'cors',
                 cache: 'no-cache',
                 headers: {
-                    'Content-Type': 'application/json' // これが 'doOptions' をトリガーします
+                    // ★★★ ここを変更 ★★★
+                    'Content-Type': 'text/plain' 
                 },
-                body: JSON.stringify(data),
+                body: JSON.stringify(data), // 送るデータはJSON文字列のまま
                 redirect: 'follow'
             })
             .then(response => response.json())
             .then(result => {
+                // ... (then, catch, finally は変更なし) ...
                 if (result.status === 'success') {
                     showMessage('送信成功！スプレッドシートに記録されました。', 'success');
-                    form.reset(); // フォームをリセット
-                    document.getElementById('game-date').valueAsDate = new Date(); // 日付を今日にリセット
+                    form.reset(); 
+                    document.getElementById('game-date').valueAsDate = new Date();
                 } else {
                     throw new Error(result.message || '不明なエラーが発生しました。');
                 }
@@ -109,19 +106,16 @@
                 showMessage(`送信エラー: ${error.message}`, 'error');
             })
             .finally(() => {
-                // 送信ボタンを再度有効化
                 submitButton.disabled = false;
                 submitButton.textContent = "送信";
             });
         });
 
-        // メッセージ表示用のヘルパー関数
+        // ... (showMessage, 日付デフォルト設定 は変更なし) ...
         function showMessage(msg, type) {
             messageEl.textContent = msg;
             messageEl.className = type;
         }
-
-        // 日付のデフォルト値を今日に設定
         document.getElementById('game-date').valueAsDate = new Date();
     </script>
 </body>
