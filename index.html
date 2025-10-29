@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>麻雀 戦歴入力</title>
+    <style>
+        body { font-family: sans-serif; max-width: 500px; margin: 2em auto; padding: 1em; background: #f9f9f9; }
+        form { background: #fff; padding: 2em; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        div { margin-bottom: 1em; }
+        label { display: block; margin-bottom: 0.5em; font-weight: bold; }
+        input { width: calc(100% - 10px); padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        button { width: 100%; padding: 0.8em; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 1em; }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #ccc; }
+        #message { margin-top: 1em; padding: 0.5em; border-radius: 4px; text-align: center; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+
+    <h2>3人麻雀 戦歴入力フォーム</h2>
+
+    <form id="score-form">
+        <div>
+            <label for="game-date">日付:</label>
+            <input type="date" id="game-date" required>
+        </div>
+        <div>
+            <label for="userA-score">Matsui スコア:</label>
+            <input type="number" id="userA-score" placeholder="例: 25" required>
+        </div>
+        <div>
+            <label for="userB-score">Komaki スコア:</label>
+            <input type="number" id="userB-score" placeholder="例: -10" required>
+        </div>
+        <div>
+            <label for="userC-score">Otomo スコア:</label>
+            <input type="number" id="userC-score" placeholder="例: -15" required>
+        </div>
+        <button type="submit" id="submit-button">送信</button>
+    </form>
+
+    <div id="message"></div>
+
+    <script>
+        // ---------------------------------
+        // 設定項目
+        // ---------------------------------
+        // ステップ1で取得したGASのURL
+        const GAS_URL = "https://script.google.com/macros/s/AKfycbxz0eCt8DnaKPb-r_QP0zcKk5oEsZCDjzB1WSEnuGbzDRYJ48nGCK5BwWVNuVvRnkAeeA/exec";
+        // ---------------------------------
+
+        const form = document.getElementById('score-form');
+        const messageEl = document.getElementById('message');
+        const submitButton = document.getElementById('submit-button');
+
+        // フォーム送信時の処理
+        form.addEventListener('submit', function(e) {
+            e.preventDefault(); // デフォルトの送信をキャンセル
+
+            // 合計が0チェック（麻雀のルール上）
+            const scoreA = parseInt(document.getElementById('userA-score').value) || 0;
+            const scoreB = parseInt(document.getElementById('userB-score').value) || 0;
+            const scoreC = parseInt(document.getElementById('userC-score').value) || 0;
+
+            if (scoreA + scoreB + scoreC !== 0) {
+                showMessage('エラー: 3人のスコア合計が 0 になりません。', 'error');
+                return; // 送信を中断
+            }
+
+            // 送信ボタンを無効化
+            submitButton.disabled = true;
+            submitButton.textContent = "送信中...";
+            showMessage('', ''); // メッセージをクリア
+
+            // GASに送信するデータを作成
+            const data = {
+                date: document.getElementById('game-date').value,
+                userA: scoreA,
+                userB: scoreB,
+                userC: scoreC
+            };
+
+            // fetch API を使ってGASにデータをPOST送信
+            fetch(GAS_URL, {
+                method: 'POST',
+                mode: 'cors',
+                cache: 'no-cache',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data),
+                redirect: 'follow' // GASはリダイレクトを返すことがあるため
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.status === 'success') {
+                    showMessage('送信成功！スプレッドシートに記録されました。', 'success');
+                    form.reset(); // フォームをリセット
+                } else {
+                    throw new Error(result.message || '不明なエラーが発生しました。');
+                }
+            })
+            .catch(error => {
+                console.error('Fetch Error:', error);
+                showMessage(`送信エラー: ${error.message}`, 'error');
+            })
+            .finally(() => {
+                // 送信ボタンを再度有効化
+                submitButton.disabled = false;
+                submitButton.textContent = "送信";
+            });
+        });
+
+        // メッセージ表示用のヘルパー関数
+        function showMessage(msg, type) {
+            messageEl.textContent = msg;
+            messageEl.className = type; // 'success' または 'error'
+        }
+
+        // 日付のデフォルト値を今日に設定
+        document.getElementById('game-date').valueAsDate = new Date();
+
+    </script>
+</body>
+</html>
