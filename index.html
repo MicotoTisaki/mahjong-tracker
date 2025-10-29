@@ -4,12 +4,38 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>麻雀 戦歴入力 (粗点対応版)</title>
+
     <style>
         body { font-family: sans-serif; max-width: 500px; margin: 2em auto; padding: 1em; background: #f9f9f9; }
         form { background: #fff; padding: 2em; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
         div { margin-bottom: 1em; }
         label { display: block; margin-bottom: 0.5em; font-weight: bold; }
-        input { width: calc(100% - 10px); padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        
+        /* --- 変更点 (入力欄とチェックボックスの調整) --- */
+        input[type="date"] {
+            width: calc(100% - 10px); padding: 8px; border: 1px solid #ccc; border-radius: 4px;
+        }
+        .input-group {
+            display: flex; /* 横並びのため */
+            align-items: center; /* 垂直中央揃え */
+        }
+        .input-group input[type="number"] { 
+            padding: 8px; 
+            border: 1px solid #ccc; 
+            border-radius: 4px; 
+            flex-grow: 1; /* 入力欄を伸ばす */
+            width: 70%; /* 幅の目安 */
+        }
+        .tie-label {
+            display: block;
+            margin-left: 10px;
+            font-weight: normal;
+            font-size: 0.9em;
+            color: #555;
+            white-space: nowrap; /* 折り返し防止 */
+        }
+        /* --- 変更点ここまで --- */
+
         button { width: 100%; padding: 0.8em; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 1em; }
         button:hover { background: #0056b3; }
         button:disabled { background: #ccc; }
@@ -29,22 +55,36 @@
         </div>
         <div>
             <label for="matsui-score">松井 粗点:</label>
-            <input type="number" id="matsui-score" placeholder="例: 55000" step="100" required>
+            <div class="input-group">
+                <input type="number" id="matsui-score" placeholder="例: 55000" step="100" required>
+                <label class="tie-label">
+                    <input type="checkbox" id="matsui-tie-priority"> 同着上位
+                </label>
+            </div>
         </div>
         <div>
             <label for="komaki-score">小牧 粗点:</label>
-            <input type="number" id="komaki-score" placeholder="例: 30000" step="100" required>
+            <div class="input-group">
+                <input type="number" id="komaki-score" placeholder="例: 30000" step="100" required>
+                <label class="tie-label">
+                    <input type="checkbox" id="komaki-tie-priority"> 同着上位
+                </label>
+            </div>
         </div>
         <div>
             <label for="otomo-score">大友 粗点:</label>
-            <input type="number" id="otomo-score" placeholder="例: 20000" step="100" required>
+            <div class="input-group">
+                <input type="number" id="otomo-score" placeholder="例: 20000" step="100" required>
+                <label class="tie-label">
+                    <input type="checkbox" id="otomo-tie-priority"> 同着上位
+                </label>
+            </div>
         </div>
         <button type="submit" id="submit-button">送信</button>
     </form>
 
     <div id="message"></div>
-
-    <script>
+<script>
         // ---------------------------------
         // 設定項目
         // ---------------------------------
@@ -55,24 +95,17 @@
         const messageEl = document.getElementById('message');
         const submitButton = document.getElementById('submit-button');
 
-        // ★★★ 5捨6入を行う関数 ★★★
+        // (変更なし) 5捨6入を行う関数
         function customRound(number) {
-            // 1. 符号を取得 (1 または -1)
             const sign = Math.sign(number);
-            
-            // 2. 絶対値を取得
             const absNumber = Math.abs(number);
-            
-            // 3. 絶対値に対して5捨6入の計算
             const decimal = absNumber - Math.floor(absNumber);
             let roundedAbs;
             if (decimal <= 0.5) {
-                roundedAbs = Math.floor(absNumber); // 5以下は切り捨て
+                roundedAbs = Math.floor(absNumber);
             } else {
-                roundedAbs = Math.ceil(absNumber); // 6以上は切り上げ
+                roundedAbs = Math.ceil(absNumber);
             }
-            
-            // 4. 元の符号を掛け合わせて返す
             return roundedAbs * sign;
         }
 
@@ -84,53 +117,93 @@
             const rawKomaki = parseInt(document.getElementById('komaki-score').value) || 0;
             const rawOtomo = parseInt(document.getElementById('otomo-score').value) || 0;
 
-            // 1. 合計点の確認 (105000点)
+            // (変更なし) 合計点の確認 (105000点)
             const totalRaw = rawMatsui + rawKomaki + rawOtomo;
             if (totalRaw !== 105000) {
                 showMessage(`エラー: 粗点の合計が ${totalRaw} 点です。105000点になりません。`, 'error');
                 return;
             }
 
-            // 2. プレイヤーを粗点順にソート（順位付け）
+            // ★★★ 新規追加: 同点チェック ★★★
+            const matsuiCheck = document.getElementById('matsui-tie-priority').checked;
+            const komakiCheck = document.getElementById('komaki-tie-priority').checked;
+            const otomoCheck = document.getElementById('otomo-tie-priority').checked;
+
+            let tieError = false;
+            let errorMessage = 'エラー: 同点のプレイヤーがいます。「同着上位」チェックボックスで順位を明確に指定してください。(両方ON、または両方OFFは不可)';
+
+            // 3人同点チェック
+            if (rawMatsui === rawKomaki && rawKomaki === rawOtomo) {
+                const checkCount = (matsuiCheck ? 1 : 0) + (komakiCheck ? 1 : 0) + (otomoCheck ? 1 : 0);
+                if (checkCount === 0 || checkCount === 3) { // 0個または3個ONはNG
+                    tieError = true;
+                    errorMessage = 'エラー: 3人同点です。チェックボックスが0個または3個ONになっています。順位を明確に指定してください。';
+                }
+            } else {
+                // 2人同点チェック
+                if (rawMatsui === rawKomaki && matsuiCheck === komakiCheck) { // 両方ONまたは両方OFFはNG
+                    tieError = true;
+                }
+                if (rawKomaki === rawOtomo && komakiCheck === otomoCheck) {
+                    tieError = true;
+                }
+                if (rawMatsui === rawOtomo && matsuiCheck === otomoCheck) {
+                    tieError = true;
+                }
+            }
+
+            if (tieError) {
+                showMessage(errorMessage, 'error');
+                return; // 送信を中断
+            }
+            // ★★★ 同点チェックここまで ★★★
+
+
+            // ★★★ 変更点: プレイヤー配列にチェック状態(tiePriority)を追加 ★★★
             let players = [
-                { name: 'matsui', raw: rawMatsui, score: 0 },
-                { name: 'komaki', raw: rawKomaki, score: 0 },
-                { name: 'otomo', raw: rawOtomo, score: 0 }
+                { name: 'matsui', raw: rawMatsui, tiePriority: matsuiCheck, score: 0 },
+                { name: 'komaki', raw: rawKomaki, tiePriority: komakiCheck, score: 0 },
+                { name: 'otomo', raw: rawOtomo, tiePriority: otomoCheck, score: 0 }
             ];
-            // 粗点の降順 (点が高い順) にソート
-            players.sort((a, b) => b.raw - a.raw);
+
+            // ★★★ 変更点: ソートロジックに同点時の処理を追加 ★★★
+            players.sort((a, b) => {
+                if (a.raw !== b.raw) {
+                    return b.raw - a.raw; // 粗点が高い順
+                }
+                // 同点の場合、tiePriorityがtrue (チェックあり) の方が上位 (インデックスが若くなる)
+                if (a.tiePriority && !b.tiePriority) {
+                    return -1; // aをbより前に
+                }
+                if (!a.tiePriority && b.tiePriority) {
+                    return 1; // bをaより前に
+                }
+                return 0; // (両方ON/OFFはエラーで弾かれているはず)
+            });
             
-            // players[0] が1位, players[1] が2位, players[2] が3位
-            
-            // 3. 2位と3位のスコアを計算
-            // 2位: (粗点 - 40000) / 1000 を 5捨6入
+            // 3. 2位と3位のスコアを計算 (変更なし)
             const score2nd = customRound((players[1].raw - 40000) / 1000);
-            
-            // 3位: (粗点 - 40000) / 1000 を 5捨6入し、さらに -20
             const score3rd = customRound((players[2].raw - 40000) / 1000) - 20;
 
-            // 4. 1位のスコアを算出 (合計が0になるように)
+            // 4. 1位のスコアを算出 (変更なし)
             const score1st = -(score2nd + score3rd);
 
-            // 5. 元のプレイヤー名に戻す
+            // 5. 元のプレイヤー名に戻す (変更なし)
             players[0].score = score1st; // 1位の人
             players[1].score = score2nd; // 2位の人
             players[2].score = score3rd; // 3位の人
 
-            // 6. 送信データ（スコア）を作成
-            //    (ソートされた順ではなく、フォームの順に戻す)
+            // 6. 送信データ（スコア）を作成 (変更なし)
             const finalScores = {};
             players.forEach(p => {
                 finalScores[p.name] = p.score;
             });
             
-            // --- ここから下は、ほぼ変更なし ---
-
+            // --- ここから下は、変更なし ---
             submitButton.disabled = true;
             submitButton.textContent = "送信中...";
             showMessage('', ''); 
 
-            // GASに送信するデータを作成 (計算済みのスコア)
             const data = {
                 date: document.getElementById('game-date').value,
                 matsui: finalScores.matsui,
@@ -138,12 +211,11 @@
                 otomo: finalScores.otomo
             };
             
-            // (デバッグ用) 送信するスコアをコンソールに表示
             console.log('送信するスコア:', data);
 
             fetch(GAS_URL, {
                 method: 'POST',
-                mode: 'no-cors', // 応答を見ない（送りっぱなし）
+                mode: 'no-cors', 
                 cache: 'no-cache',
                 headers: {
                     'Content-Type': 'text/plain'
@@ -166,13 +238,13 @@
             });
         });
 
-        // メッセージ表示用のヘルパー関数
+        // (変更なし) メッセージ表示用のヘルパー関数
         function showMessage(msg, type) {
             messageEl.textContent = msg;
             messageEl.className = type;
         }
 
-        // 日付のデフォルト値を今日に設定
+        // (変更なし) 日付のデフォルト値を今日に設定
         document.getElementById('game-date').valueAsDate = new Date();
     </script>
 </body>
