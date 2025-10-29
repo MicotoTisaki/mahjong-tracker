@@ -28,16 +28,16 @@
             <input type="date" id="game-date" required>
         </div>
         <div>
-            <label for="userA-score">Matsui スコア:</label>
-            <input type="number" id="userA-score" placeholder="例: 25" required>
+            <label for="matsui-score">松井 スコア:</label>
+            <input type="number" id="matsui-score" placeholder="例: 25" required>
         </div>
         <div>
-            <label for="userB-score">Komaki スコア:</label>
-            <input type="number" id="userB-score" placeholder="例: -10" required>
+            <label for="komaki-score">小牧 スコア:</label>
+            <input type="number" id="komaki-score" placeholder="例: -10" required>
         </div>
         <div>
-            <label for="userC-score">Otomo スコア:</label>
-            <input type="number" id="userC-score" placeholder="例: -15" required>
+            <label for="otomo-score">大友 スコア:</label>
+            <input type="number" id="otomo-score" placeholder="例: -15" required>
         </div>
         <button type="submit" id="submit-button">送信</button>
     </form>
@@ -46,9 +46,9 @@
 
     <script>
         // ---------------------------------
-        // 設定項目
+        // ユーザー設定項目
         // ---------------------------------
-        // ステップ1で取得したGASのURL
+        // GASの「ウェブアプリのURL」を貼り付け
         const GAS_URL = "https://script.google.com/macros/s/AKfycbxz0eCt8DnaKPb-r_QP0zcKk5oEsZCDjzB1WSEnuGbzDRYJ48nGCK5BwWVNuVvRnkAeeA/exec";
         // ---------------------------------
 
@@ -56,16 +56,16 @@
         const messageEl = document.getElementById('message');
         const submitButton = document.getElementById('submit-button');
 
-        // フォーム送信時の処理
         form.addEventListener('submit', function(e) {
             e.preventDefault(); // デフォルトの送信をキャンセル
+            
+            // 各スコアのIDを取得
+            const scoreMatsui = parseInt(document.getElementById('matsui-score').value) || 0;
+            const scoreKomaki = parseInt(document.getElementById('komaki-score').value) || 0;
+            const scoreOtomo = parseInt(document.getElementById('otomo-score').value) || 0;
 
-            // 合計が0チェック（麻雀のルール上）
-            const scoreA = parseInt(document.getElementById('userA-score').value) || 0;
-            const scoreB = parseInt(document.getElementById('userB-score').value) || 0;
-            const scoreC = parseInt(document.getElementById('userC-score').value) || 0;
-
-            if (scoreA + scoreB + scoreC !== 0) {
+            // 合計が0チェック
+            if (scoreMatsui + scoreKomaki + scoreOtomo !== 0) {
                 showMessage('エラー: 3人のスコア合計が 0 になりません。', 'error');
                 return; // 送信を中断
             }
@@ -78,9 +78,9 @@
             // GASに送信するデータを作成
             const data = {
                 date: document.getElementById('game-date').value,
-                userA: scoreA,
-                userB: scoreB,
-                userC: scoreC
+                matsui: scoreMatsui,
+                komaki: scoreKomaki,
+                otomo: scoreOtomo
             };
 
             // fetch API を使ってGASにデータをPOST送信
@@ -89,16 +89,17 @@
                 mode: 'cors',
                 cache: 'no-cache',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json' // これが 'doOptions' をトリガーします
                 },
                 body: JSON.stringify(data),
-                redirect: 'follow' // GASはリダイレクトを返すことがあるため
+                redirect: 'follow'
             })
             .then(response => response.json())
             .then(result => {
                 if (result.status === 'success') {
                     showMessage('送信成功！スプレッドシートに記録されました。', 'success');
                     form.reset(); // フォームをリセット
+                    document.getElementById('game-date').valueAsDate = new Date(); // 日付を今日にリセット
                 } else {
                     throw new Error(result.message || '不明なエラーが発生しました。');
                 }
@@ -117,12 +118,11 @@
         // メッセージ表示用のヘルパー関数
         function showMessage(msg, type) {
             messageEl.textContent = msg;
-            messageEl.className = type; // 'success' または 'error'
+            messageEl.className = type;
         }
 
         // 日付のデフォルト値を今日に設定
         document.getElementById('game-date').valueAsDate = new Date();
-
     </script>
 </body>
 </html>
