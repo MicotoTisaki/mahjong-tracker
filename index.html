@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>麻雀 戦歴入力</title>
+    <title>麻雀 戦歴入力 (粗点対応版)</title>
     <style>
         body { font-family: sans-serif; max-width: 500px; margin: 2em auto; padding: 1em; background: #f9f9f9; }
         form { background: #fff; padding: 2em; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
@@ -28,16 +28,16 @@
             <input type="date" id="game-date" required>
         </div>
         <div>
-            <label for="matsui-score">松井 スコア:</label>
-            <input type="number" id="matsui-score" placeholder="例: 25" required>
+            <label for="matsui-score">松井 粗点:</label>
+            <input type="number" id="matsui-score" placeholder="例: 55000" step="100" required>
         </div>
         <div>
-            <label for="komaki-score">小牧 スコア:</label>
-            <input type="number" id="komaki-score" placeholder="例: -10" required>
+            <label for="komaki-score">小牧 粗点:</label>
+            <input type="number" id="komaki-score" placeholder="例: 30000" step="100" required>
         </div>
         <div>
-            <label for="otomo-score">大友 スコア:</label>
-            <input type="number" id="otomo-score" placeholder="例: -15" required>
+            <label for="otomo-score">大友 粗点:</label>
+            <input type="number" id="otomo-score" placeholder="例: 20000" step="100" required>
         </div>
         <button type="submit" id="submit-button">送信</button>
     </form>
@@ -46,7 +46,7 @@
 
     <script>
         // ---------------------------------
-        // ユーザー設定項目
+        // 設定項目
         // ---------------------------------
         const GAS_URL = "https://script.google.com/macros/s/AKfycbxk6bgUggm-k1fiepdm_xQO4U43da_zpbQyW7ba84PMaracGbv8V94G5nWkST6t5tpnsw/exec";
         // ---------------------------------
@@ -55,66 +55,113 @@
         const messageEl = document.getElementById('message');
         const submitButton = document.getElementById('submit-button');
 
+        // ★★★ 5捨6入を行う関数 ★★★
+        function customRound(number) {
+            const decimal = number - Math.floor(number);
+            if (decimal <= 0.5) {
+                return Math.floor(number); // 5以下は切り捨て
+            } else {
+                return Math.ceil(number); // 6以上は切り上げ
+            }
+        }
+
         form.addEventListener('submit', function(e) {
             e.preventDefault(); 
             
-            const scoreMatsui = parseInt(document.getElementById('matsui-score').value) || 0;
-            const scoreKomaki = parseInt(document.getElementById('komaki-score').value) || 0;
-            const scoreOtomo = parseInt(document.getElementById('otomo-score').value) || 0;
+            // フォームから「粗点」を取得
+            const rawMatsui = parseInt(document.getElementById('matsui-score').value) || 0;
+            const rawKomaki = parseInt(document.getElementById('komaki-score').value) || 0;
+            const rawOtomo = parseInt(document.getElementById('otomo-score').value) || 0;
 
-            if (scoreMatsui + scoreKomaki + scoreOtomo !== 0) {
-                showMessage('エラー: 3人のスコア合計が 0 になりません。', 'error');
+            // 1. 合計点の確認 (105000点)
+            const totalRaw = rawMatsui + rawKomaki + rawOtomo;
+            if (totalRaw !== 105000) {
+                showMessage(`エラー: 粗点の合計が ${totalRaw} 点です。105000点になりません。`, 'error');
                 return;
             }
+
+            // 2. プレイヤーを粗点順にソート（順位付け）
+            let players = [
+                { name: 'matsui', raw: rawMatsui, score: 0 },
+                { name: 'komaki', raw: rawKomaki, score: 0 },
+                { name: 'otomo', raw: rawOtomo, score: 0 }
+            ];
+            // 粗点の降順 (点が高い順) にソート
+            players.sort((a, b) => b.raw - a.raw);
+            
+            // players[0] が1位, players[1] が2位, players[2] が3位
+            
+            // 3. 2位と3位のスコアを計算
+            // 2位: (粗点 - 40000) / 1000 を 5捨6入
+            const score2nd = customRound((players[1].raw - 40000) / 1000);
+            
+            // 3位: (粗点 - 40000) / 1000 を 5捨6入し、さらに -20
+            const score3rd = customRound((players[2].raw - 40000) / 1000) - 20;
+
+            // 4. 1位のスコアを算出 (合計が0になるように)
+            const score1st = -(score2nd + score3rd);
+
+            // 5. 元のプレイヤー名に戻す
+            players[0].score = score1st; // 1位の人
+            players[1].score = score2nd; // 2位の人
+            players[2].score = score3rd; // 3位の人
+
+            // 6. 送信データ（スコア）を作成
+            //    (ソートされた順ではなく、フォームの順に戻す)
+            const finalScores = {};
+            players.forEach(p => {
+                finalScores[p.name] = p.score;
+            });
+            
+            // --- ここから下は、ほぼ変更なし ---
 
             submitButton.disabled = true;
             submitButton.textContent = "送信中...";
             showMessage('', ''); 
 
+            // GASに送信するデータを作成 (計算済みのスコア)
             const data = {
                 date: document.getElementById('game-date').value,
-                matsui: scoreMatsui,
-                komaki: scoreKomaki,
-                otomo: scoreOtomo
+                matsui: finalScores.matsui,
+                komaki: finalScores.komaki,
+                otomo: finalScores.otomo
             };
-
-fetch(GAS_URL, {
-            method: 'POST',
-            // ★★★ ここを 'no-cors' に変更 ★★★
-            // 'no-cors'モードは「応答を見ない（送りっぱなし）」を意味します
-            mode: 'no-cors', 
-            // ★★★★★★★★★★★★★★★★★★★★
             
-            cache: 'no-cache',
-            headers: {
-                'Content-Type': 'text/plain'
-            },
-            body: JSON.stringify(data),
-            redirect: 'follow'
-        })
-        .then(response => {
-            // 'no-cors' モードでは .then は使われない (または空の応答が来る)
-            // 常に成功したとみなす
-            showMessage('送信成功！スプレッドシートに記録されました。', 'success');
-            form.reset(); 
-            document.getElementById('game-date').valueAsDate = new Date();
-        })
-        .catch(error => {
-            // 'no-cors' モードでは、ネットワークの切断以外で
-            // ここがエラーになることは、ほぼ無くなります。
-            console.error('Fetch Error:', error);
-            showMessage(`送信エラー: ${error.message}`, 'error');
-        })
-        .finally(() => {
-            submitButton.disabled = false;
-            submitButton.textContent = "送信";
+            // (デバッグ用) 送信するスコアをコンソールに表示
+            console.log('送信するスコア:', data);
+
+            fetch(GAS_URL, {
+                method: 'POST',
+                mode: 'no-cors', // 応答を見ない（送りっぱなし）
+                cache: 'no-cache',
+                headers: {
+                    'Content-Type': 'text/plain'
+                },
+                body: JSON.stringify(data),
+                redirect: 'follow'
+            })
+            .then(response => {
+                showMessage('送信成功！スプレッドシートに記録されました。', 'success');
+                form.reset(); 
+                document.getElementById('game-date').valueAsDate = new Date();
+            })
+            .catch(error => {
+                console.error('Fetch Error:', error);
+                showMessage(`送信エラー: ${error.message}`, 'error');
+            })
+            .finally(() => {
+                submitButton.disabled = false;
+                submitButton.textContent = "送信";
+            });
         });
-    });
-        // ... (showMessage, 日付デフォルト設定 は変更なし) ...
+
+        // メッセージ表示用のヘルパー関数
         function showMessage(msg, type) {
             messageEl.textContent = msg;
             messageEl.className = type;
         }
+
+        // 日付のデフォルト値を今日に設定
         document.getElementById('game-date').valueAsDate = new Date();
     </script>
 </body>
