@@ -57,12 +57,23 @@
 
         // ★★★ 5捨6入を行う関数 ★★★
         function customRound(number) {
-            const decimal = number - Math.floor(number);
+            // 1. 符号を取得 (1 または -1)
+            const sign = Math.sign(number);
+            
+            // 2. 絶対値を取得
+            const absNumber = Math.abs(number);
+            
+            // 3. 絶対値に対して5捨6入の計算
+            const decimal = absNumber - Math.floor(absNumber);
+            let roundedAbs;
             if (decimal <= 0.5) {
-                return Math.floor(number); // 5以下は切り捨て
+                roundedAbs = Math.floor(absNumber); // 5以下は切り捨て
             } else {
-                return Math.ceil(number); // 6以上は切り上げ
+                roundedAbs = Math.ceil(absNumber); // 6以上は切り上げ
             }
+            
+            // 4. 元の符号を掛け合わせて返す
+            return roundedAbs * sign;
         }
 
         form.addEventListener('submit', function(e) {
